@@ -6,7 +6,7 @@ use MIME::Base64;
 use Cwd 'abs_path';
 use POSIX;
  
- my $ScriptDir = abs_path($0);
+my $ScriptDir = abs_path($0);
 $ScriptDir =~ s{/\w+\.pl$}{};
 chdir $ScriptDir or dir $!;
 
@@ -15,18 +15,25 @@ if($date eq "")
 {
 	$date = strftime("%Y-%m-%d", localtime (time + 86400));
 }
-my $data = `curl -s "https://www.groupe-e.ch/fr/api/vario/${date}T"` or die;
+open IN, "lastdate.txt";
+my $lastDate = <IN>;
+exit 1 if $lastDate eq $date;
+my $url = sprintf("https://api.tariffs.groupe-e.ch/v2/tariffs?start_timestamp=%sT00:00:00+01:00", ${date});
+#print "$url\n";
+my $data = `curl -s $url` or die;
 my $json = decode_json($data);
-my @data = @{$json->{data}};
+my @data = @{$json->{prices}};
 #print Dumper(\@data);
-die unless @data == 97;
-shift @data; # The first item is 23h45-0h00, annoying to handle
+my $cnt = @data;
+die if @data != 96;
+
 open OUT, ">$date.dat";
 for my $i(@data)
 {
 	if($i->{start_timestamp} =~ /${date}T(\d\d):(\d\d)+/)
 	{ 
-		printf OUT "%g\t%g\t%g\t%g\n", $1 + $2 / 60, $i->{vario_plus}, $i->{vario_grid}, $i->{dt_plus};
+		my $h = $1;
+		printf OUT "%g\t%g\t%g\t%g\n", $1 + $2 / 60, $i->{integrated}[0]{value}*100, $i->{grid}[0]{value}*100, ($h>=7&&$h<12 || $h>=17&&$h<23)?29.32:19.27;
 	}
 	else 
 		{ die; }
@@ -87,3 +94,5 @@ my $email = 'patrick@airnavigation.aero';
 
 system "cat $date.mail  | mail -s 'Rapport Vario du $date' $email --content-type='multipart/related;boundary=\"boundary-separator\";type=\"text/html\"'";
 system "rm $date.*";
+open OUT, ">lastdate.txt";
+print OUT $date;
