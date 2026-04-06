@@ -15,6 +15,7 @@ if($date eq "")
 {
 	$date = strftime("%Y-%m-%d", localtime (time + 86400));
 }
+# https://groupeeapimanagement.developer.azure-api.net/api-details#api=tariffapiapp-func-prod&operation=tariffs
 open IN, "lastdate.txt";
 my $lastDate = <IN>;
 exit 1 if $lastDate eq $date;
