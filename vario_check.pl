@@ -19,7 +19,7 @@ if($date eq "")
 open IN, "lastdate.txt";
 my $lastDate = <IN>;
 exit 1 if $lastDate eq $date;
-my $url = "https://www.groupe-e.ch/fr/api/vario/${date}";
+my $url = "https://www.groupe-e.ch/fr/api/vario/${date}A";
 my $data = `curl -s $url or die`;
 my $json = decode_json($data);
 my @data = @{$json->{data}};
