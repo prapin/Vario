@@ -19,22 +19,20 @@ if($date eq "")
 open IN, "lastdate.txt";
 my $lastDate = <IN>;
 exit 1 if $lastDate eq $date;
-my $url = sprintf("https://api.tariffs.groupe-e.ch/v2/tariffs?start_timestamp=%sT00:00:00+01:00", ${date});
-#print "$url\n";
-my $data = `curl -s $url` or die;
+my $url = "https://www.groupe-e.ch/fr/api/vario/${date}";
+my $data = `curl -s $url or die`;
 my $json = decode_json($data);
-my @data = @{$json->{prices}};
+my @data = @{$json->{data}};
 #print Dumper(\@data);
 my $cnt = @data;
-die if @data != 96;
-
+die $cnt unless $cnt == 97;
+shift @data; # The first item is 23h45-0h00, annoying to handle
 open OUT, ">$date.dat";
 for my $i(@data)
 {
 	if($i->{start_timestamp} =~ /${date}T(\d\d):(\d\d)+/)
 	{ 
-		my $h = $1;
-		printf OUT "%g\t%g\t%g\t%g\n", $1 + $2 / 60, $i->{integrated}[0]{value}*100, $i->{grid}[0]{value}*100, ($h>=7&&$h<12 || $h>=17&&$h<23)?29.32:19.27;
+		printf OUT "%g\t%g\t%g\t%g\n", $1 + $2 / 60, $i->{vario_plus}, $i->{vario_grid}, $i->{dt_plus};
 	}
 	else 
 		{ die; }
