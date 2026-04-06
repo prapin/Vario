@@ -2,12 +2,23 @@
 use strict;
 use JSON;
 use Data::Dumper;
- use MIME::Base64;
+use MIME::Base64;
+use Cwd 'abs_path';
+use POSIX;
  
+ my $ScriptDir = abs_path($0);
+$ScriptDir =~ s{/\w+\.pl$}{};
+chdir $ScriptDir or dir $!;
+
 my $date = $ARGV[0];
+if($date eq "")
+{
+	$date = strftime("%Y-%m-%d", localtime (time + 86400));
+}
 my $data = `curl -s "https://www.groupe-e.ch/fr/api/vario/${date}T"` or die;
 my $json = decode_json($data);
 my @data = @{$json->{data}};
+#print Dumper(\@data);
 die unless @data == 97;
 shift @data; # The first item is 23h45-0h00, annoying to handle
 open OUT, ">$date.dat";
@@ -75,3 +86,4 @@ my $email = 'patrick@airnavigation.aero';
 #my $email = 'rapin.patrick@gmail.com';
 
 system "cat $date.mail  | mail -s 'Rapport Vario du $date' $email --content-type='multipart/related;boundary=\"boundary-separator\";type=\"text/html\"'";
+system "rm $date.*";
