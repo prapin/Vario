@@ -6,6 +6,12 @@ use MIME::Base64;
 use Cwd 'abs_path';
 use POSIX;
  
+# List of required dependencies on APT (at a minimum):
+# sudo apt install fonts-freefont-otf ghostscript gnuplot octave
+
+# This is URL of official V2 API. But apparently it is impossible to have data for the next day.
+# https://groupeeapimanagement.developer.azure-api.net/api-details#api=tariffapiapp-func-prod&operation=tariffs
+ 
 my $ScriptDir = abs_path($0);
 $ScriptDir =~ s{/\w+\.pl$}{};
 chdir $ScriptDir or dir $!;
@@ -15,7 +21,6 @@ if($date eq "")
 {
 	$date = strftime("%Y-%m-%d", localtime (time + 86400));
 }
-# https://groupeeapimanagement.developer.azure-api.net/api-details#api=tariffapiapp-func-prod&operation=tariffs
 open IN, "lastdate.txt";
 my $lastDate = <IN>;
 exit 1 if $lastDate eq $date;
