@@ -9,12 +9,16 @@ use POSIX;
 # List of required dependencies on APT (at a minimum):
 # sudo apt install fonts-freefont-otf ghostscript gnuplot octave
 
-# This is URL of official V2 API. But apparently it is impossible to have data for the next day.
+# Uses the official V2 API (the www.groupe-e.ch/fr/api/vario URL is now behind a Cloudflare CAPTCHA).
+# Next day data is published around 14h50.
 # https://groupeeapimanagement.developer.azure-api.net/api-details#api=tariffapiapp-func-prod&operation=tariffs
- 
+
+$ENV{TZ} = 'Europe/Zurich';
+tzset();
+
 my $ScriptDir = abs_path($0);
 $ScriptDir =~ s{/\w+\.pl$}{};
-chdir $ScriptDir or dir $!;
+chdir $ScriptDir or die $!;
 
 my $date = $ARGV[0];
 if($date eq "")
@@ -24,22 +28,45 @@ if($date eq "")
 open IN, "lastdate.txt";
 my $lastDate = <IN>;
 exit 1 if $lastDate eq $date;
-my $url = "https://www.groupe-e.ch/fr/api/vario/${date}A";
-my $data = `curl -s $url or die`;
+
+# Local midnight of $date and of the next day, as ISO 8601 with UTC offset (+02:00 or +01:00)
+sub iso_midnight
+{
+	my ($y, $m, $d) = @_;
+	my $t = mktime(0, 0, 0, $d, $m - 1, $y - 1900, 0, 0, -1);
+	my $s = strftime("%Y-%m-%dT%H:%M:%S%z", localtime $t);
+	$s =~ s/(\d\d)$/:$1/;
+	$s =~ s/\+/%2B/;
+	return $s;
+}
+my ($y, $m, $d) = $date =~ /^(\d{4})-(\d\d)-(\d\d)$/ or die "Bad date $date";
+my $start = iso_midnight($y, $m, $d);
+my $end = iso_midnight($y, $m, $d + 1);
+my $url = "https://api.tariffs.groupe-e.ch/v2/tariffs?start_timestamp=$start&end_timestamp=$end";
+my $data = `curl -s -f '$url'`;
+die "curl failed: $?" if $?;
 my $json = decode_json($data);
-my @data = @{$json->{data}};
+my @data = @{$json->{prices}};
 #print Dumper(\@data);
 my $cnt = @data;
-die $cnt unless $cnt == 97;
-shift @data; # The first item is 23h45-0h00, annoying to handle
+die "Expected 96 prices, got $cnt (not yet published, or DST change day)\n" unless $cnt == 96;
+
+# DT Plus (double tariff) is not in the API: fixed price, low from 23h to 7h and from 12h to 17h
+sub dt_plus
+{
+	my $h = shift;
+	return ($h >= 7 && $h < 12) || ($h >= 17 && $h < 23) ? 29.32 : 19.27;
+}
+
 open OUT, ">$date.dat";
 for my $i(@data)
 {
 	if($i->{start_timestamp} =~ /${date}T(\d\d):(\d\d)+/)
-	{ 
-		printf OUT "%g\t%g\t%g\t%g\n", $1 + $2 / 60, $i->{vario_plus}, $i->{vario_grid}, $i->{dt_plus};
+	{
+		my $h = $1 + $2 / 60;
+		printf OUT "%g\t%g\t%g\t%g\n", $h, 100 * $i->{integrated}[0]{value}, 100 * $i->{grid}[0]{value}, dt_plus($h);
 	}
-	else 
+	else
 		{ die; }
 }
 close OUT;
