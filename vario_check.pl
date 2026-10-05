@@ -120,8 +120,8 @@ print OUT encode_base64($_);
 
 print OUT "\n--boundary-separator--\n";
 
-my $email = 'patrick@airnavigation.aero';
-#my $email = 'rapin.patrick@gmail.com';
+#my $email = 'patrick@airnavigation.aero';
+my $email = 'rapin.patrick@gmail.com';
 
 # ssmtp adds no Message-ID, and Gmail rejects messages without one
 my $msgid = "<vario-$date-" . time . ".$$\@airnavigation.aero>";
