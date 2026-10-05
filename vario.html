@@ -14,7 +14,9 @@
 	#date-bar button { width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 50%; background: var(--bg); color: var(--blue); font-size: 20px; line-height: 1; cursor: pointer; }
 	#date-bar button:hover:not(:disabled) { background: var(--blue); color: #fff; }
 	#date-bar button:disabled { opacity: .35; cursor: default; }
-	#date { font: inherit; font-size: 18px; font-weight: 600; color: var(--blue); padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; }
+	#date-field { display: flex; align-items: center; gap: 6px; padding: 0 0 0 10px; font-size: 18px; font-weight: 600; color: var(--blue); border: 1px solid var(--line); border-radius: 6px; }
+	#date { font: inherit; color: inherit; padding: 6px 10px 6px 0; border: none; background: none; outline: none; }
+	#date-field:focus-within { border-color: var(--blue); }
 	#chart-box { position: relative; height: min(70vh, 560px); }
 	#message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 16px; text-align: center; pointer-events: none; }
 </style>
@@ -23,7 +25,7 @@
 <main>
 	<div id="date-bar">
 		<button id="previous" type="button" title="Jour précédent" aria-label="Jour précédent">&#8249;</button>
-		<input id="date" type="date" aria-label="Date">
+		<label id="date-field"><span id="weekday"></span><input id="date" type="date" aria-label="Date"></label>
 		<button id="next" type="button" title="Jour suivant" aria-label="Jour suivant">&#8250;</button>
 	</div>
 	<div id="chart-box">
@@ -47,6 +49,8 @@ const dtPlus = h => (h >= 7 && h < 12) || (h >= 17 && h < 23) ? 29.32 : 19.27;
 
 const input = document.getElementById('date');
 const message = document.getElementById('message');
+const weekday = document.getElementById('weekday');
+const weekdayFormat = new Intl.DateTimeFormat('fr-CH', { weekday: 'long', timeZone: 'UTC' });
 input.max = maxDate;
 
 const chart = new Chart(document.getElementById('chart'), {
@@ -68,8 +72,12 @@ const chart = new Chart(document.getElementById('chart'), {
 			x: {
 				ticks: {
 					autoSkip: false, maxRotation: 0,
-					// One label per hour (the labels are local "HH:mm")
-					callback(value) { const l = this.getLabelForValue(value); return l.endsWith(':00') ? l : null; },
+					// One label per hour (the labels are local "HH:mm"), or every 2, 3... hours on narrow screens
+					callback(value) {
+						const l = this.getLabelForValue(value);
+						const step = [1, 2, 3, 4, 6].find(s => (this.chart.width - 80) * s / 24 >= 40) || 6;
+						return l.endsWith(':00') && l.slice(0, 2) % step === 0 ? l : null;
+					},
 				},
 				grid: { color: ctx => ctx.tick && ctx.tick.label ? 'rgba(0,0,0,0.1)' : 'transparent' },
 			},
@@ -91,6 +99,7 @@ let request = 0;
 async function load(date)
 {
 	input.value = date;
+	weekday.textContent = weekdayFormat.format(new Date(date + 'T12:00:00Z'));
 	document.getElementById('next').disabled = date >= maxDate;
 	history.replaceState(null, '', '#' + date);
 	const id = ++request;
