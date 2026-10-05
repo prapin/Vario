@@ -123,7 +123,9 @@ print OUT "\n--boundary-separator--\n";
 my $email = 'patrick@airnavigation.aero';
 #my $email = 'rapin.patrick@gmail.com';
 
-system "cat $date.mail  | mail -s 'Rapport Vario du $date' $email --content-type='multipart/related;boundary=\"boundary-separator\";type=\"text/html\"'";
+# ssmtp adds no Message-ID, and Gmail rejects messages without one
+my $msgid = "<vario-$date-" . time . ".$$\@airnavigation.aero>";
+system "cat $date.mail  | mail -a 'Message-ID: $msgid' -a 'From: Vario <patrick\@airnavigation.aero>' -s 'Rapport Vario du $date' $email --content-type='multipart/related;boundary=\"boundary-separator\";type=\"text/html\"'";
 system "rm $date.*";
 open OUT, ">lastdate.txt";
 print OUT $date;
