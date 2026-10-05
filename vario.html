@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarifs Vario</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+	:root { --blue: #003a7c; --text: #222; --muted: #666; --bg: #fff; --line: #d6dbe3; }
+	* { box-sizing: border-box; }
+	body { margin: 0; padding: 24px 16px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); }
+	main { max-width: 1200px; margin: 0 auto; }
+	#date-bar { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px; }
+	#date-bar button { width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 50%; background: var(--bg); color: var(--blue); font-size: 20px; line-height: 1; cursor: pointer; }
+	#date-bar button:hover:not(:disabled) { background: var(--blue); color: #fff; }
+	#date-bar button:disabled { opacity: .35; cursor: default; }
+	#date { font: inherit; font-size: 18px; font-weight: 600; color: var(--blue); padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; }
+	#chart-box { position: relative; height: min(70vh, 560px); }
+	#message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 16px; text-align: center; pointer-events: none; }
+</style>
+</head>
+<body>
+<main>
+	<div id="date-bar">
+		<button id="previous" type="button" title="Jour précédent" aria-label="Jour précédent">&#8249;</button>
+		<input id="date" type="date" aria-label="Date">
+		<button id="next" type="button" title="Jour suivant" aria-label="Jour suivant">&#8250;</button>
+	</div>
+	<div id="chart-box">
+		<canvas id="chart"></canvas>
+		<div id="message"></div>
+	</div>
+</main>
+<script>
+// Dates are handled as "YYYY-MM-DD" strings in Swiss local time
+const zurichDate = d => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Zurich' }).format(d);
+const addDays = (date, n) => {
+	const d = new Date(date + 'T12:00:00Z');
+	d.setUTCDate(d.getUTCDate() + n);
+	return d.toISOString().slice(0, 10);
+};
+// Next day data is published around 14h50
+const maxDate = addDays(zurichDate(new Date()), 1);
+
+// DT Plus (double tariff) is not in the API: fixed price, low from 23h to 7h and from 12h to 17h
+const dtPlus = h => (h >= 7 && h < 12) || (h >= 17 && h < 23) ? 29.32 : 19.27;
+
+const input = document.getElementById('date');
+const message = document.getElementById('message');
+input.max = maxDate;
+
+const chart = new Chart(document.getElementById('chart'), {
+	type: 'line',
+	data: {
+		labels: [],
+		datasets: [
+			{ label: 'Tarif Vario PLUS', borderColor: '#003a7c', backgroundColor: '#003a7c', cubicInterpolationMode: 'monotone', data: [] },
+			{ label: 'Tarif Vario (grid)', borderColor: '#FF6384', backgroundColor: '#FF6384', cubicInterpolationMode: 'monotone', hidden: true, data: [] },
+			{ label: 'Tarif Double PLUS', borderColor: '#FF9F40', backgroundColor: '#FF9F40', stepped: 'before', pointRadius: 0, data: [] },
+		],
+	},
+	options: {
+		maintainAspectRatio: false,
+		animation: { duration: 300 },
+		interaction: { mode: 'index', intersect: false },
+		elements: { point: { radius: 2, hoverRadius: 5 }, line: { borderWidth: 2.5 } },
+		scales: {
+			x: {
+				ticks: {
+					autoSkip: false, maxRotation: 0,
+					// One label per hour (the labels are local "HH:mm")
+					callback(value) { const l = this.getLabelForValue(value); return l.endsWith(':00') ? l : null; },
+				},
+				grid: { color: ctx => ctx.tick && ctx.tick.label ? 'rgba(0,0,0,0.1)' : 'transparent' },
+			},
+			y: { ticks: { callback: v => v + ' ct./kWh' }, grid: { color: 'rgba(0,0,0,0.1)' } },
+		},
+		plugins: {
+			legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } },
+			tooltip: {
+				callbacks: {
+					title: items => items[0].label,
+					label: item => ` ${item.dataset.label}: ${item.parsed.y.toFixed(2)} ct./kWh`,
+				},
+			},
+		},
+	},
+});
+
+let request = 0;
+async function load(date)
+{
+	input.value = date;
+	document.getElementById('next').disabled = date >= maxDate;
+	history.replaceState(null, '', '#' + date);
+	const id = ++request;
+	message.textContent = 'Chargement…';
+	let prices = [];
+	try {
+		const res = await fetch('api?date=' + date);
+		if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+		prices = (await res.json()).prices;
+	} catch (e) {
+		if (id === request) message.textContent = 'Erreur lors du chargement des tarifs (' + e.message + ')';
+		prices = null;
+	}
+	if (id !== request) return;
+	if (prices && !prices.length)
+		message.textContent = date === maxDate ? 'Les tarifs de demain sont publiés vers 14h50' : 'Aucun tarif disponible pour ce jour';
+	else if (prices)
+		message.textContent = '';
+	prices = prices || [];
+
+	const labels = prices.map(p => p.start_timestamp.slice(11, 16));
+	const vario = prices.map(p => +(100 * p.integrated[0].value).toFixed(2));
+	const grid = prices.map(p => +(100 * p.grid[0].value).toFixed(2));
+	const dt = labels.map(l => dtPlus(+l.slice(0, 2)));
+	if (prices.length) {
+		// Repeat the last value at 24:00 so the last quarter hour is drawn
+		labels.push('24:00');
+		for (const a of [vario, grid, dt]) a.push(a[a.length - 1]);
+	}
+	chart.options.scales.x.display = chart.options.scales.y.display = prices.length > 0;
+	chart.data.labels = labels;
+	[vario, grid, dt].forEach((d, i) => chart.data.datasets[i].data = d);
+	chart.update();
+}
+
+input.addEventListener('change', () => input.value && load(input.value > maxDate ? maxDate : input.value));
+document.getElementById('previous').addEventListener('click', () => load(addDays(input.value, -1)));
+document.getElementById('next').addEventListener('click', () => load(addDays(input.value, 1)));
+
+const dateFromHash = () => {
+	const date = location.hash.slice(1);
+	return /^\d{4}-\d\d-\d\d$/.test(date) && date <= maxDate ? date : zurichDate(new Date());
+};
+window.addEventListener('hashchange', () => dateFromHash() !== input.value && load(dateFromHash()));
+load(dateFromHash());
+</script>
+</body>
+</html>

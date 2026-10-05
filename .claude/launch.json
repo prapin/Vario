@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vario-web",
+      "runtimeExecutable": "./vario_web.pl",
+      "runtimeArgs": ["8080"],
+      "port": 8080
+    }
+  ]
+}
