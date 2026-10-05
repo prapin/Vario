@@ -53,21 +53,29 @@ const weekday = document.getElementById('weekday');
 const weekdayFormat = new Intl.DateTimeFormat('fr-CH', { weekday: 'long', timeZone: 'UTC' });
 input.max = maxDate;
 
+// With stairs, hovering must select the quarter hour under the cursor, not the nearest point
+Chart.Interaction.modes.stairs = (chart, e) => {
+	const x = chart.scales.x, n = chart.data.labels.length;
+	if (n < 2 || e.x < x.left || e.x > x.right) return [];
+	const index = Math.min(Math.floor((e.x - x.left) / x.width * (n - 1)), n - 2);
+	return chart.getSortedVisibleDatasetMetas().map(meta => ({ element: meta.data[index], datasetIndex: meta.index, index }));
+};
+
 const chart = new Chart(document.getElementById('chart'), {
 	type: 'line',
 	data: {
 		labels: [],
 		datasets: [
-			{ label: 'Tarif Vario PLUS', borderColor: '#003a7c', backgroundColor: '#003a7c', cubicInterpolationMode: 'monotone', data: [] },
-			{ label: 'Tarif Vario (grid)', borderColor: '#FF6384', backgroundColor: '#FF6384', cubicInterpolationMode: 'monotone', hidden: true, data: [] },
-			{ label: 'Tarif Double PLUS', borderColor: '#FF9F40', backgroundColor: '#FF9F40', stepped: 'before', pointRadius: 0, data: [] },
+			{ label: 'Tarif Vario PLUS', borderColor: '#003a7c', backgroundColor: '#003a7c', data: [] },
+			{ label: 'Tarif Vario (grid)', borderColor: '#FF6384', backgroundColor: '#FF6384', hidden: true, data: [] },
+			{ label: 'Tarif Double PLUS', borderColor: '#FF9F40', backgroundColor: '#FF9F40', data: [] },
 		],
 	},
 	options: {
 		maintainAspectRatio: false,
 		animation: { duration: 300 },
-		interaction: { mode: 'index', intersect: false },
-		elements: { point: { radius: 2, hoverRadius: 5 }, line: { borderWidth: 2.5 } },
+		interaction: { mode: 'stairs', intersect: false },
+		elements: { point: { radius: 0, hoverRadius: 5 }, line: { borderWidth: 2.5, stepped: 'before' } },
 		scales: {
 			x: {
 				ticks: {
@@ -87,7 +95,7 @@ const chart = new Chart(document.getElementById('chart'), {
 			legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } },
 			tooltip: {
 				callbacks: {
-					title: items => items[0].label,
+					title: items => items[0].label + ' – ' + chart.data.labels[items[0].dataIndex + 1],
 					label: item => ` ${item.dataset.label}: ${item.parsed.y.toFixed(2)} ct./kWh`,
 				},
 			},
