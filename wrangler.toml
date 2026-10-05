@@ -1,0 +1,9 @@
+name = "vario"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# Bundle vario.html as a string (imported by worker.js)
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
