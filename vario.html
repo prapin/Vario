@@ -17,6 +17,15 @@
 	#date-field { display: flex; align-items: center; gap: 6px; padding: 0 0 0 10px; font-size: 18px; font-weight: 600; color: var(--blue); border: 1px solid var(--line); border-radius: 6px; }
 	#date { font: inherit; color: inherit; padding: 6px 10px 6px 0; border: none; background: none; outline: none; }
 	#date-field:focus-within { border-color: var(--blue); }
+	#stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 16px; }
+	#stats[hidden] { display: none; }
+	.stat { min-width: 150px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 6px; }
+	.stat-label { font-size: 13px; color: var(--muted); }
+	.stat-value { font-size: 22px; font-weight: 600; color: var(--blue); }
+	.stat-value small, .stat-time { font-size: 13px; font-weight: normal; color: var(--muted); }
+	#windows { margin: 2px 0 0; padding: 0; list-style: none; font-size: 15px; }
+	#windows li { display: flex; justify-content: space-between; gap: 16px; line-height: 1.6; }
+	#windows b { color: var(--blue); }
 	#chart-box { position: relative; height: min(70vh, 560px); }
 	#message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 16px; text-align: center; pointer-events: none; }
 </style>
@@ -27,6 +36,12 @@
 		<button id="previous" type="button" title="Jour précédent" aria-label="Jour précédent">&#8249;</button>
 		<label id="date-field"><span id="weekday"></span><input id="date" type="date" aria-label="Date"></label>
 		<button id="next" type="button" title="Jour suivant" aria-label="Jour suivant">&#8250;</button>
+	</div>
+	<div id="stats" hidden>
+		<div class="stat"><div class="stat-label">Prix minimal</div><div class="stat-value" id="min"></div><div class="stat-time" id="min-time"></div></div>
+		<div class="stat"><div class="stat-label">Prix maximal</div><div class="stat-value" id="max"></div><div class="stat-time" id="max-time"></div></div>
+		<div class="stat"><div class="stat-label">Prix moyen</div><div class="stat-value" id="mean"></div></div>
+		<div class="stat"><div class="stat-label">Moyennes minimales sur 3h</div><ul id="windows"></ul></div>
 	</div>
 	<div id="chart-box">
 		<canvas id="chart"></canvas>
@@ -103,6 +118,39 @@ const chart = new Chart(document.getElementById('chart'), {
 	},
 });
 
+// Same statistics on the Vario PLUS tariff as vario.m (sent in the daily mail)
+const hour = l => l.replace(':', 'h');
+const price = v => `${v.toFixed(2)} <small>ct./kWh</small>`;
+function showStats(labels, vario)
+{
+	const stats = document.getElementById('stats');
+	stats.hidden = !vario.length;
+	if (!vario.length) return;
+	let iMin = 0, iMax = 0;
+	vario.forEach((v, i) => {
+		if (v < vario[iMin]) iMin = i;
+		if (v > vario[iMax]) iMax = i;
+	});
+	document.getElementById('min').innerHTML = price(vario[iMin]);
+	document.getElementById('min-time').textContent = 'à ' + hour(labels[iMin]);
+	document.getElementById('max').innerHTML = price(vario[iMax]);
+	document.getElementById('max-time').textContent = 'à ' + hour(labels[iMax]);
+	document.getElementById('mean').innerHTML = price(vario.reduce((a, b) => a + b) / vario.length);
+
+	// Local minima of the average over a sliding range of 13 quarter hours (3h)
+	const plage = 13;
+	const sums = [];
+	for (let k = 0; k + plage <= vario.length; k++)
+		sums.push(vario.slice(k, k + plage).reduce((a, b) => a + b));
+	// Prices have 2 decimals: ignore floating point noise when comparing sums
+	const slopes = sums.slice(1).map((s, k) => Math.abs(s - sums[k]) < 1e-6 ? 0 : Math.sign(s - sums[k]));
+	const windows = [];
+	for (let k = 0; k + 1 < slopes.length; k++)
+		if (slopes[k + 1] > slopes[k])
+			windows.push(`<li><span>De <b>${hour(labels[k + 1])}</b> à <b>${hour(labels[k + plage])}</b></span><span><b>${price(sums[k + 1] / plage)}</b></span></li>`);
+	document.getElementById('windows').innerHTML = windows.join('') || '<li>Aucune</li>';
+}
+
 let request = 0;
 async function load(date)
 {
@@ -132,6 +180,7 @@ async function load(date)
 	const vario = prices.map(p => +(100 * p.integrated[0].value).toFixed(2));
 	const grid = prices.map(p => +(100 * p.grid[0].value).toFixed(2));
 	const dt = labels.map(l => dtPlus(+l.slice(0, 2)));
+	showStats(labels, vario);
 	if (prices.length) {
 		// Repeat the last value at 24:00 so the last quarter hour is drawn
 		labels.push('24:00');
